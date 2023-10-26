@@ -1,0 +1,26 @@
+Tower game, 1v1 -> XvX
+
+-10 floors, start at the top go downwards.
+-First level is safe, each team has one floor to themselves
+-Second floor possible to meet eachother.
+-PVP
+-classes and/or create own class STR,DEX,AGI... etc
+
+-Class ideas:
+	-Thickboi- 2x2 squares big, can special and remove blocks from the level (Miner)
+	-Bathmaster, can throw cold buckets at enemies to freeze them (Brewmaster)
+	-Bard, play guitarr. ex enemies who gets hit by the tunes get their controls reversed (Bard)
+	-Warlock, have a minion follow them who does the physical fighting, warlock can only cast spells.
+		-Optionally warlock can control their pet
+	-Knight special to be able to block hallways with their sheilds so no-one can pass.
+
+-Some sort of gameplay loop on each floor
+-EX (either or):
+	-[*]minions to kill for cash for shop
+	-loot resources to build new weapons
+	-random loot drops
+	-[*]some sort of objective for the team to unlock their door down to the next level
+		-(Teams can mess with eachother)
+	-When one team goes down to the next floor the previous floor will start burning(ex battleroyale)
+	-[*]Maybe each floor is just filled and they have to mine around to find the door down
+		-This way they might run into eachother and have to fight in the mines
