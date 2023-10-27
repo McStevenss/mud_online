@@ -3,16 +3,20 @@ from os import environ
 import os
 import pygame
 from pygame.locals import *
-#SCREENSIZE = (640, 480)
-SCREENSIZE = (1280, 960)
+from item import Item,Equip_slots,get_loot_table
+
+SCREENSIZE = (640, 480)
+#SCREENSIZE = (1280, 960)
 
 
 
 environ['SDL_VIDEO_CENTERED'] = '1'
 pygame.init()
-screen = pygame.display.set_mode(SCREENSIZE)
+screen = pygame.display.set_mode((1580, 960)) #Game screen will use (1280, 960), the other 300 pixels is gui
 
-#test_screen = pygame.Surface((640,480))
+game_screen = pygame.Surface(SCREENSIZE)
+gui_screen = pygame.Surface((300,960))
+
 
 pygame.font.init()
 fnt = pygame.font.SysFont("Arial", 14)
@@ -64,9 +68,7 @@ class game_shell:
         self.game_map = None #Set in initial
         self.game_map_decorations = None #Set in initial
         self.tileSize = 32
-        
-
-        
+  
         self.wall_color = (255,0,0)
         self.ground_color = (64,64,64)
         self.sprite_dict = {
@@ -78,7 +80,12 @@ class game_shell:
                " ": self.image_at(18,0),
                "<": self.image_at(54,11),
                ">": self.image_at(53,11)}
-    
+        
+        self.font = pygame.font.Font('freesansbold.ttf', 32)
+        self.small_font = pygame.font.Font('freesansbold.ttf', 12)
+
+
+
     def Set_Camera_Offset(self,offset_x,offset_y):
         self.camera_offset_x = (SCREENSIZE[0] // 2) - offset_x #((len(self.game_map[0]) * self.tileSize) // 2) 
         self.camera_offset_y = (SCREENSIZE[1] // 2) - offset_y #((len(self.game_map) * self.tileSize) // 2)
@@ -96,13 +103,13 @@ class game_shell:
                 exit()
             
             if event.type == pygame.KEYUP:
-                if event.key == pygame.K_UP:
+                if event.key == pygame.K_UP or event.key == pygame.K_w:
                     self.Move(UP)
-                if event.key == pygame.K_RIGHT:
+                if event.key == pygame.K_RIGHT or event.key == pygame.K_d:
                     self.Move(RIGHT)               
-                if event.key == pygame.K_LEFT:
+                if event.key == pygame.K_LEFT or event.key == pygame.K_a:
                     self.Move(LEFT)                 
-                if event.key == pygame.K_DOWN:
+                if event.key == pygame.K_DOWN or event.key == pygame.K_s:
                     self.Move(DOWN) 
                     
                 if event.key == pygame.K_RETURN:
@@ -110,7 +117,7 @@ class game_shell:
                     
     def Set_Window_Title(self, text):
         pygame.display.set_caption(text)
-        
+    
         
     def image_at(self, x, y):
         """Load a specific image from a specific rectangle."""
@@ -122,43 +129,73 @@ class game_shell:
     
             
     def Draw(self, players):
-        screen.fill(Color('black'))
+        game_screen.fill(Color('black'))
         if self.game_map != None and self.current_floor != None and self.game_map_decorations != None:
             local_x = self.players[self.id]['position'][0]
             local_y = self.players[self.id]['position'][1]
             self.Set_Camera_Offset(offset_x=local_x*self.tileSize ,offset_y=local_y*self.tileSize)
             for y, row in enumerate(self.game_map[self.players[self.id]['current_floor']]):
-                for x, char in enumerate(row):
-                    
+                for x, char in enumerate(row):        
                     pos_x,pos_y = self.ConvertPos(x,y)
                     #Draw map
-                    screen.blit(self.sprite_dict[char], (pos_x, pos_y))
-            
-            #{'position': (26, 20), 'decoration_tile': (32, 38)}
-            for decoration in self.game_map_decorations:
-                dec_x, dec_y = self.ConvertPos(decoration["position"][0],decoration["position"][1])
-                screen.blit(self.image_at(decoration["decoration_tile"][0],decoration["decoration_tile"][1]), (dec_x, dec_y))
-            #Draw players
+                    game_screen.blit(self.sprite_dict[char], (pos_x, pos_y))
+
+            self.Draw_Decorations()
             self.Draw_Players(players)
+            self.Draw_Gui()
                     
-        #scaled_win = pygame.transform.scale(screen, screen.get_size())
-        #screen.blit(scaled_win, (0, 0))            
+        scaled_win = pygame.transform.scale(game_screen, (1280, 960))
+        #scaled_win = pygame.transform.scale(game_screen, screen.get_size())
+        screen.blit(scaled_win, (0, 0))    
+        screen.blit(gui_screen,(1280, 0))        
         pygame.display.flip()
         self.frame += 1
-                    
-        
+
+    def Draw_Decorations(self):
+        for decoration in self.game_map_decorations:
+            dec_x, dec_y = self.ConvertPos(decoration["position"][0],decoration["position"][1])
+            game_screen.blit(self.image_at(decoration["decoration_tile"][0],decoration["decoration_tile"][1]), (dec_x, dec_y))            
+    
     def Draw_Players(self,players):
-        for color, position, id, inventory in players:
+        for id in players:
             if self.players[id]["current_floor"] == self.players[self.id]["current_floor"]: #Only draw players on the same floor as us
-                
+                position = self.players[id]["position"]
+                inventory = self.players[id]["inventory"]
+                base_character_tile = self.players[id]["base_character_tile"]
+
                 pos_x,pos_y = self.ConvertPos(position[0],position[1])
-                draw_order = ["cloak","player","legs","chest","feet","head","hand1","hand2"]
+                draw_order = ["cloak","player","legs","chest","hands","feet","head","hand1","hand2"]
                 
                 for part in draw_order:           
                     if part == "player":
-                        screen.blit(self.image_at(9,80), (pos_x, pos_y))
+                        game_screen.blit(self.image_at(base_character_tile[0],base_character_tile[1]), (pos_x, pos_y))
                     
                     elif inventory[part] == None:
                         continue
                     else:
-                        screen.blit(self.image_at(inventory[part][0],inventory[part][1]), (pos_x, pos_y))   
+                        game_screen.blit(self.image_at(inventory[part][0],inventory[part][1]), (pos_x, pos_y))   
+
+
+    def Draw_Gui(self):
+
+        for players, attributes in self.players.items():
+            pos_x,pos_y = self.ConvertPos(attributes["position"][0],attributes["position"][1])
+            hp_text = self.small_font.render(f"{attributes['health']}", True, Color("green"), Color("blue"))
+
+            game_screen.blit(hp_text, (pos_x+5,pos_y+32))
+
+        
+        name_text = self.font.render(f"Name:{self.players[self.id]['name']}", True, Color("green"))
+        textRect = name_text.get_rect()
+        textRect.topleft = (15,0)
+        gui_screen.blit(name_text, textRect)
+
+        health_text = self.font.render(f"Health:{self.players[self.id]['health']}", True, Color("green"))
+        textRect = health_text.get_rect()
+        textRect.topleft = (15,50)
+        gui_screen.blit(health_text, textRect)
+
+     
+
+
+

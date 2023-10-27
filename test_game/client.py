@@ -1,14 +1,18 @@
 from __future__ import print_function
-
 import sys
+from sys import stdin, exit
 from time import sleep
 
 from PodSixNet.Connection import connection, ConnectionListener
 from game_shell import game_shell
+from item import Item,Equip_slots,get_loot_table
 
 class Client(ConnectionListener, game_shell):
     def __init__(self, host, port):
         self.Connect((host, port))
+
+        self.Setup_character()
+
         self.players = {}
         game_shell.__init__(self) #Init game for client
         self.id = None
@@ -17,12 +21,7 @@ class Client(ConnectionListener, game_shell):
         self.Pump()
         connection.Pump()
         self.Events() #game_shell.events 
-        #print(self.players)
-        self.Draw([
-            (self.players[p]['color'],
-             self.players[p]['position'],
-             p,
-             self.players[p]['inventory']) for p in self.players])
+        self.Draw([p for p in self.players])
         
         if "connecting" in self.statusLabel:
             self.statusLabel = "connecting" + "".join(["." for s in range(int(self.frame / 30) % 4)])
@@ -47,23 +46,17 @@ class Client(ConnectionListener, game_shell):
         self.game_map = data['game_map']
         self.id = data['player_id']
         self.game_map_decorations = data['game_map_decorations']
-        print("decorations",  data['game_map_decorations'])
         self.Set_Window_Title(f"Player id: {self.id}")
         
+        print(self.players)
         #Focus camera on player
         self.Set_Camera_Offset(offset_x=self.players[self.id]['position'][1],offset_y=self.players[self.id]['position'][1])
-        
-        
-        print("Server map:")
-        for row in self.game_map[self.current_floor]: #Print gamemap
-            print(row)
             
     def Network_move(self, data): #This is reached by the server through:  player.Send({"action": "initial",....})
         old_x, old_y = self.players[data['id']]['position']
         self.players[data['id']]['position'] = (old_x + data['position'][0], old_y + data['position'][1])
         
-    def Network_use(self,data):
-        
+    def Network_use(self,data):     
         if 'move' in data.keys():
             if data['move'] == 'down':
                 self.players[data['id']]['current_floor'] +=1
@@ -73,25 +66,63 @@ class Client(ConnectionListener, game_shell):
                 self.players[data['id']]['current_floor'] -=1
                 self.players[data['id']]['position'] = data['position']
 
+        elif 'equipped' in data.keys():
+            slot = data["equipped"]["slot"]
+            print(data["equipped"])
+            equipped_tile = data["equipped"]["on_equipped_tile"]
+            self.players[data['id']]['inventory'][slot] = equipped_tile
+            self.game_map_decorations = data["updated_decorations"]
+
     
     def Network_editmap(self,data):
         print(f"player {data['id']} edited the map!")
         self.game_map[data['floor']] = data['edited_map'][data['floor']]
-        
+    
+    def Network_nickname(self,data):
+        print(f"{data['nickname']} ({data['id']}) has joined!")
+        self.players[data['id']]["name"] = data["nickname"]
+        self.players[data['id']]["base_character_tile"] = data["character"]
 
+    def Setup_character(self):
+
+        race_dict = {
+            "human":{
+                "male":(7,80),
+                "female":(6,80)
+                },
+            "minotaur":{
+                "male":(16,80),
+                "female":(14,80)
+                },
+            "gargoyle":{
+                "male":(63,80),
+                "female":(62,80)
+                },
+            "lizardian":{
+                "male":(3,81),
+                "female":(2,81)
+                }
+            }
+        print("Greetings adventurer")
+        player_name   = input("Whats your name? >")
+        player_race   = input("What race are you? (human, minotaur, gargoyle, lizardian) >")
+        player_gender = input("What gender are you? male or female? >")
+
+        connection.Send({"action": "nickname", "nickname": player_name, "character":race_dict[player_race][player_gender]})
     
     #Updates to players
     def Network_players(self, data): # self.SendToAll({"action": "players", "players": dict([(p.id, p.color) for p in self.players])})
         self.playersLabel = str(len(data['players'])) + " players"
         mark = []
-        
         for i in data['players']:
             if not i in self.players: # New player
                 self.players[i] = {
-                    'color': data['players'][i]['color'],
                     'position': data['players'][i]['position'],
                     'current_floor': data['players'][i]['current_floor'],
-                    'inventory': data['players'][i]['inventory']                   
+                    'inventory': data['players'][i]['inventory'],
+                    'health': data['players'][i]['health'],
+                    'base_character_tile': data['players'][i]['base_character_tile'],
+                    'name': data['players'][i]['name']               
                     }
         
         for i in self.players: # Player is gone

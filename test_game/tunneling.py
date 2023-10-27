@@ -28,9 +28,9 @@ class TunnelingAlgorithm:
     '''
     def __init__(self):
         self.level = []
-        self.ROOM_MAX_SIZE = 15
-        self.ROOM_MIN_SIZE = 10
-        self.MAX_ROOMS = 1
+        self.ROOM_MIN_SIZE = 3
+        self.ROOM_MAX_SIZE = 8
+        self.MAX_ROOMS = 200
         self.rooms = []
         # TODO: raise an error if any necessary classes are missing
 

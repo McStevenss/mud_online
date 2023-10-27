@@ -1,6 +1,9 @@
 import random
 import pygame
 from tunneling import TunnelingAlgorithm
+from item import Item, Equip_slots, get_loot_table
+
+
 class Game_map():
     def __init__(self):
         self.walkable_tiles = [".","'"]
@@ -296,43 +299,37 @@ class Game_map():
         
         decoration_statues = [(12,12),(13,12),(14,12),(15,12),(16,12),(17,12),(18,12),(19,12),(34,12),(35,12)]
         decoration_misc = [(6,0),(7,0),(8,0),(9,0),(61,0)]
-        items = [(32,38)]
+
+        items = get_loot_table()
+
         decoration_intensity = 6
         
-        decorations = [decoration_statues,decoration_misc, items]
+        decorations = [
+            {"tile": decoration_statues, "type": "decoration"},
+            {"tile": decoration_misc,    "type": "decoration"},
+            {"tile": items,              "type": "equippable"}
+            ]
         
         for room in self.tunneler.rooms:
-            x0,x1,y0,y1 = room.x1,room.x2,room.y1,room.y2
-            test_X = 0
-            test_Y = 0
-    
-            
-            print("xy0",(x0,y0),"xy1",(x1,y1))
-            
             #Everything is fucking flipped
-            t = y1
-            y1 = x1
-            x1 = t
-            
-            t = y0
-            y0 = x0
-            x0 = t
-            
+            y0,y1,x0,x1 = room.x1,room.x2,room.y1,room.y2
+
+            #Eventually change this to preset room decorations and fit them inside room instead if they fit
             for _ in range(decoration_intensity):
                 
                 decoration_category = random.choice(decorations)
-                decoration_to_be_placed = random.choice(decoration_category)
+                decoration_to_be_placed = random.choice(decoration_category["tile"])
                 
-                ranX = random.randint(x0+1,x1)
-                ranY = random.randint(y0+1,y1)
-                
-               # print(f"random x is between {x0+1} - {x1} is: {ranX}")
-               # print(f"random y is between {y0+1} - {y1} is: {ranY}")
-               # print("-"*10)
-                decoration_list.append({"position": (ranX,ranY), "decoration_tile":(decoration_to_be_placed)})
+                ranX = random.randint(x0+1,x1-1)
+                ranY = random.randint(y0+1,y1-1)
 
-            
-            
+                if decoration_category["type"] != "equippable":
+                    decoration_list.append({"position": (ranX,ranY), "decoration_tile":(decoration_to_be_placed), "type":decoration_category["type"]})
+                else:
+                    decoration_list.append({"position": (ranX,ranY), "decoration_tile":(decoration_to_be_placed.loot_tile), "type":decoration_category["type"],"item":decoration_to_be_placed.serialize()})
+
+
+
         return decoration_list
 
                     

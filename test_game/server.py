@@ -9,7 +9,11 @@ from PodSixNet.Server import Server
 from PodSixNet.Channel import Channel
 
 from game_map import Game_map
-    
+import command_utils
+
+from item import Item, Equip_slots, get_loot_table
+from player import Player
+
 game_map = Game_map()
 class ServerChannel(Channel):
     """
@@ -19,18 +23,23 @@ class ServerChannel(Channel):
         Channel.__init__(self, *args, **kwargs)
         self.id = str(self._server.NextId())
         intid = int(self.id)
-        self.color = [(intid + 1) % 3 * 84, (intid + 2) % 3 * 84, (intid + 3) % 3 * 84] #tuple([randint(0, 127) for r in range(3)])
         self.game_map_class = game_map
         
-        self.inventory = {"cloak": (16,84), "chest":(57,82), "legs":(38,93),"hands":(57,84) ,"head":(39,92),"feet":(60,83), "hand1":(42,90),"hand2":(48,85)}
-        #self.inventory = {"cloak": None, "chest": None, "legs":None,"hands":None ,"head":None,"feet": None, "hand1": None,"hand2": None}
-        
+        #self.inventory = {"cloak": (16,84), "chest":(57,82), "legs":(38,93),"hands":(57,84) ,"head":(39,92),"feet":(60,83), "hand1":(42,90),"hand2":(48,85)}
+        self.inventory = {"cloak": None, "chest": None, "legs":None,"hands":None ,"head":None,"feet": None, "hand1": None,"hand2": None} 
         self.current_floor = 0
         self.game_map = self.game_map_class.Get_Map()
         
         #Set initial position
         self.position = self.game_map_class.Get_spawn_point(current_floor=self.current_floor)
-        
+        self.health = 100
+    
+        #Here evey player object is setup.
+        self.player_object = Player(self.id,self.position,self.inventory,self.current_floor,self.health)
+
+
+
+
     def PassOn(self, data): # pass on what we received to all connected clients
         data.update({"id": self.id})
         self._server.SendToAll(data)
@@ -40,6 +49,7 @@ class ServerChannel(Channel):
     
     def Valid_move(self, position):    
         #Check if map allows it
+
         if self.game_map[self.current_floor][position[1]][position[0]] in self.game_map_class.editable_tiles:
             is_edited = False
             if self.game_map[self.current_floor][position[1]][position[0]] == "+":
@@ -64,26 +74,48 @@ class ServerChannel(Channel):
     ##################################
 
     def Network_move(self, data):
-        new_position = (self.position[0] + data['position'][0], self.position[1] + data['position'][1])
+        new_position = (self.player_object.position[0] + data['position'][0], self.player_object.position[1] + data['position'][1])
         if self.Valid_move(new_position):
-            self.position = (self.position[0] + data['position'][0], self.position[1] + data['position'][1])
-            print(self.position)
+            self.player_object.position = (self.player_object.position[0] + data['position'][0], self.player_object.position[1] + data['position'][1])
+            #print(self.position)
             self.PassOn(data)
             
     def Network_use(self,data):
-        x,y = self.position
-        if self.game_map[self.current_floor][y][x] == ">": #Player is going down one level
-            self.current_floor = self.current_floor + 1
-            self.position = self.game_map_class.Get_spawn_point(current_floor=self.current_floor)
+        #command_utils.parse_action(self,data)
+        x,y = self.player_object.position
+        if self.game_map[self.player_object.current_floor][y][x] == ">": #Player is going down one level
+            self.player_object.current_floor = self.player_object.current_floor + 1
+            self.player_object.position = self.game_map_class.Get_spawn_point(current_floor=self.player_object.current_floor)
             data["move"] = "down"
-            data["position"] = self.position
+            data["position"] = self.player_object.position
             self.PassOn(data)
-        elif self.game_map[self.current_floor][y][x] == "<": #Player is going up one level
-            self.current_floor = self.current_floor - 1
-            self.position = self.game_map_class.Get_stair_up_point(current_floor=self.current_floor)
+        
+        elif self.game_map[self.player_object.current_floor][y][x] == "<": #Player is going up one level
+            self.player_object.current_floor = self.player_object.current_floor - 1
+            self.player_object.position = self.game_map_class.Get_stair_up_point(current_floor=self.player_object.current_floor)
             data["move"] = "up"
-            data["position"] = self.position
+            data["position"] = self.player_object.position
             self.PassOn(data)
+
+        else:
+            #Check if its an item or decoration player is trying to use
+            for decoration in self.game_map_class.game_map_decoration:
+                if decoration["position"] == (x,y):
+                    #We have found the correct decoration, depending on type we do different things
+                    if decoration["type"] == "equippable":
+                        de_serialized_item = Item.from_dict(decoration["item"])
+                        self.player_object.inventory[de_serialized_item.slot]=de_serialized_item.on_equipped_tile
+                        data["equipped"] = {"slot":de_serialized_item.slot, "on_equipped_tile":de_serialized_item.on_equipped_tile}
+
+                        self.game_map_class.game_map_decoration.remove(decoration)
+                        data["updated_decorations"] = self.game_map_class.game_map_decoration
+                        self.PassOn(data)
+
+    def Network_nickname(self, data):
+        self.player_object.name = data['nickname']
+        self.player_object.base_character_tile = data['character']
+        self.PassOn(data)
+
 
 class GameServer(Server):
     '''
@@ -97,6 +129,7 @@ class GameServer(Server):
         self.players = WeakKeyDictionary()
         self.game_map_class = game_map
         self.game_map = self.game_map_class.Get_Map()
+        self.ticks = 1000
         print('Server launched')
     
     def NextId(self):
@@ -116,13 +149,9 @@ class GameServer(Server):
                      "game_map":self.game_map,
                      "game_map_decorations":self.game_map_class.game_map_decoration,
                      "current_floor": player.current_floor,
+                     "health": player.health,
                      "players": dict([
-                         (p.id,{
-                           "color": p.color,
-                           "position": p.position,
-                           "current_floor": p.current_floor,
-                           "inventory": player.inventory
-                           }) for p in self.players])})
+                         (p.id, p.player_object.serialize()) for p in self.players])})
         self.SendPlayers()
     
     def DelPlayer(self, player):
@@ -133,13 +162,8 @@ class GameServer(Server):
     def SendPlayers(self):
         self.SendToAll({"action": "players",
                         "players": dict([
-                            (p.id,
-                             {"color": p.color,
-                              "position": p.position,
-                              "current_floor": p.current_floor,
-                              "inventory": p.inventory
-                              }
-                             ) for p in self.players])})
+                            (p.id,p.player_object.serialize()) for p in self.players])})
+  
     
     def SendToAll(self, data):
         [p.Send(data) for p in self.players]
@@ -147,6 +171,7 @@ class GameServer(Server):
     def Launch(self):
         while True:
             self.Pump()
+
             sleep(0.0001)
 
 # get command line argument of server, port
